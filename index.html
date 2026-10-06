@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Measuring Tape Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Prompt', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8">
+
+    <!-- Header -->
+    <header class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center mb-8 gap-4 border-b border-slate-800 pb-4">
+        <div class="flex items-center gap-3">
+            <div class="p-3 bg-blue-600 rounded-xl text-white shadow-lg shadow-blue-500/30">
+                <i class="fa-solid fa-ruler-combined text-2xl"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl font-bold text-white">Digital Measuring Tape</h1>
+                <p class="text-xs text-slate-400">ระบบแดชบอร์ดติดตามข้อมูลตลับเมตรดิจิทัล (ESP32 IoT)</p>
+            </div>
+        </div>
+        
+        <!-- Status & Controls -->
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
+                <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                <span id="statusText" class="text-xs font-medium text-amber-400">กำลังเชื่อมต่อ...</span>
+            </div>
+            <select id="unitSelect" onchange="changeUnit()" class="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer">
+                <option value="cm">หน่วย: เซนติเมตร (cm)</option>
+                <option value="m">หน่วย: เมตร (m)</option>
+                <option value="inch">หน่วย: นิ้ว (inch)</option>
+            </select>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto space-y-6">
+
+        <!-- Top Row: Metrics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            
+            <!-- Live Reading Card -->
+            <div class="md:col-span-2 bg-gradient-to-br from-slate-800 to-slate-850 p-6 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden">
+                <div class="absolute -right-6 -bottom-6 opacity-10 text-blue-500 text-9xl">
+                    <i class="fa-solid fa-ruler-horizontal"></i>
+                </div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-blue-400 mb-2">ค่าระยะทางปัจจุบัน (Live Distance)</div>
+                <div class="flex items-baseline gap-3 my-2">
+                    <span id="liveValue" class="text-6xl font-extrabold text-white tracking-tight">--</span>
+                    <span id="unitLabel" class="text-2xl font-bold text-slate-400">cm</span>
+                </div>
+                <p id="timeLabel" class="text-xs text-slate-400 mt-2"><i class="fa-regular fa-clock mr-1"></i>อัปเดตล่าสุด: --</p>
+            </div>
+
+            <!-- Min / Max Cards -->
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg flex flex-col justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-400 mb-1"><i class="fa-solid fa-arrow-down-short-wide text-emerald-400 mr-1"></i>ระยะต่ำสุด (Min)</div>
+                    <div class="text-3xl font-bold text-slate-100" id="minValue">-- <span class="text-base font-normal text-slate-400 unit-text">cm</span></div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-slate-700/60">
+                    <div class="text-xs font-medium text-slate-400 mb-1"><i class="fa-solid fa-arrow-up-wide-short text-amber-400 mr-1"></i>ระยะสูงสุด (Max)</div>
+                    <div class="text-3xl font-bold text-slate-100" id="maxValue">-- <span class="text-base font-normal text-slate-400 unit-text">cm</span></div>
+                </div>
+            </div>
+
+            <!-- Stats Card -->
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg flex flex-col justify-between">
+                <div>
+                    <div class="text-xs font-medium text-slate-400 mb-1"><i class="fa-solid fa-list-check text-blue-400 mr-1"></i>จำนวนครั้งที่วัดทั้งหมด</div>
+                    <div class="text-3xl font-bold text-slate-100" id="totalCount">0</div>
+                </div>
+                <div class="mt-4">
+                    <div class="text-xs text-slate-400 bg-slate-900/50 p-3 rounded-xl border border-slate-700/50">
+                        <i class="fa-solid fa-wifi text-blue-400 mr-1"></i> ดึงข้อมูลอัตโนมัติ Real-time จาก Firebase
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Middle Row: Chart & Analytics -->
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-chart-line text-blue-400"></i>
+                    กราฟแสดงระยะทางย้อนหลัง (Distance Chart)
+                </h2>
+                <div class="text-xs text-slate-400">แสดงข้อมูลล่าสุด 10 รายการ</div>
+            </div>
+            <div class="h-64 sm:h-80 w-full">
+                <canvas id="distanceChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Bottom Row: Data History Table -->
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-blue-400"></i>
+                    ประวัติการบันทึกข้อมูล (Measurement History)
+                </h2>
+                <button id="clearBtn" class="text-xs text-rose-400 hover:text-rose-300 transition flex items-center gap-1">
+                    <i class="fa-solid fa-trash-can"></i> ล้างข้อมูล
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-300">
+                    <thead class="bg-slate-900/60 text-slate-400 uppercase text-xs">
+                        <tr>
+                            <th class="py-3 px-4 rounded-l-lg">ลำดับ</th>
+                            <th class="py-3 px-4">เวลาที่บันทึก</th>
+                            <th class="py-3 px-4">ระยะทาง</th>
+                            <th class="py-3 px-4 rounded-r-lg">สถานะการใช้งาน</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTable" class="divide-y divide-slate-700/50">
+                        <tr>
+                            <td colspan="4" class="py-4 text-center text-slate-500">กำลังโหลดข้อมูล...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Firebase SDK (Modular Version) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        // ตั้งค่า Firebase Config ของคุณ
+        const firebaseConfig = {
+            databaseURL: "https://digitaltapemeasure-ec20a-default-rtdb.firebaseio.com/"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        // Variables
+        let currentUnit = 'cm';
+        let historyData = []; // [{ id, distance_cm, timeStr }]
+        let chart;
+
+        // Init Chart
+        const ctx = document.getElementById('distanceChart').getContext('2d');
+        function initChart() {
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'ระยะทาง',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.35,
+                        pointBackgroundColor: '#60a5fa',
+                        pointRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
+        }
+
+        // Conversion helper
+        window.convertUnit = function(valCm) {
+            if (valCm === undefined || valCm === null) return '--';
+            const num = parseFloat(valCm);
+            if (currentUnit === 'm') return (num / 100).toFixed(2);
+            if (currentUnit === 'inch') return (num / 2.54).toFixed(1);
+            return num.toFixed(1);
+        };
+
+        // Change Unit Handler
+        window.changeUnit = function() {
+            currentUnit = document.getElementById('unitSelect').value;
+            document.getElementById('unitLabel').innerText = currentUnit;
+            
+            // Update all unit text labels
+            document.querySelectorAll('.unit-text').forEach(el => el.innerText = currentUnit);
+            
+            updateDashboard();
+        };
+
+        // Update UI
+        function updateDashboard() {
+            if (historyData.length === 0) {
+                document.getElementById('liveValue').innerText = '--';
+                document.getElementById('minValue').innerHTML = `-- <span class="text-base font-normal text-slate-400 unit-text">${currentUnit}</span>`;
+                document.getElementById('maxValue').innerHTML = `-- <span class="text-base font-normal text-slate-400 unit-text">${currentUnit}</span>`;
+                document.getElementById('totalCount').innerText = '0';
+                document.getElementById('historyTable').innerHTML = `<tr><td colspan="4" class="py-4 text-center text-slate-500">ไม่มีข้อมูลการวัด</td></tr>`;
+                if(chart) {
+                    chart.data.labels = [];
+                    chart.data.datasets[0].data = [];
+                    chart.update();
+                }
+                return;
+            }
+
+            const rawValues = historyData.map(item => item.distance_cm);
+            const lastItem = historyData[historyData.length - 1];
+            const minVal = Math.min(...rawValues);
+            const maxVal = Math.max(...rawValues);
+
+            // 1. Update Cards
+            document.getElementById('liveValue').innerText = window.convertUnit(lastItem.distance_cm);
+            document.getElementById('timeLabel').innerHTML = `<i class="fa-regular fa-clock mr-1"></i>อัปเดตล่าสุด: ${lastItem.timeStr}`;
+            document.getElementById('minValue').innerHTML = `${window.convertUnit(minVal)} <span class="text-base font-normal text-slate-400 unit-text">${currentUnit}</span>`;
+            document.getElementById('maxValue').innerHTML = `${window.convertUnit(maxVal)} <span class="text-base font-normal text-slate-400 unit-text">${currentUnit}</span>`;
+            document.getElementById('totalCount').innerText = historyData.length;
+
+            // 2. Update Chart (Last 10 items)
+            const recentItems = historyData.slice(-10);
+            chart.data.labels = recentItems.map(item => item.timeStr);
+            chart.data.datasets[0].data = recentItems.map(item => window.convertUnit(item.distance_cm));
+            chart.update();
+
+            // 3. Update Table (Show newest first)
+            const tableBody = document.getElementById('historyTable');
+            tableBody.innerHTML = '';
+            
+            const reversedData = [...historyData].reverse();
+            reversedData.forEach((item, index) => {
+                const row = document.createElement('tr');
+                row.className = "hover:bg-slate-700/30 transition";
+                row.innerHTML = `
+                    <td class="py-3 px-4 font-medium text-slate-400">#${historyData.length - index}</td>
+                    <td class="py-3 px-4">${item.timeStr}</td>
+                    <td class="py-3 px-4 font-bold text-blue-400">${window.convertUnit(item.distance_cm)} ${currentUnit}</td>
+                    <td class="py-3 px-4"><span class="px-2 py-1 rounded-full text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">บันทึกสำเร็จ</span></td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Listen to Realtime Database Changes
+        function listenFirebase() {
+            const historyRef = ref(database, 'TapeMeasure/history');
+            
+            onValue(historyRef, (snapshot) => {
+                // Connection Status Success
+                document.getElementById('statusDot').className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+                document.getElementById('statusText').className = "text-xs font-medium text-emerald-400";
+                document.getElementById('statusText').innerText = "เชื่อมต่อแล้ว (Online)";
+
+                const data = snapshot.val();
+                historyData = [];
+
+                if (data) {
+                    Object.keys(data).forEach(key => {
+                        const item = data[key];
+                        // Format timestamp or fallback to current time
+                        let timeStr = new Date().toLocaleTimeString('th-TH');
+                        if (item.timestamp) {
+                            // If timestamp is millis or date string
+                            const dateObj = new Date(item.timestamp);
+                            if (!isNaN(dateObj.getTime())) {
+                                timeStr = dateObj.toLocaleTimeString('th-TH');
+                            }
+                        }
+                        
+                        historyData.push({
+                            id: key,
+                            distance_cm: item.distance_cm,
+                            timeStr: timeStr
+                        });
+                    });
+                }
+
+                updateDashboard();
+            }, (error) => {
+                console.error("Firebase Error:", error);
+                document.getElementById('statusDot').className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+                document.getElementById('statusText').className = "text-xs font-medium text-rose-400";
+                document.getElementById('statusText').innerText = "เชื่อมต่อล้มเหลว";
+            });
+        }
+
+        // Clear History Handler
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            if (confirm("คุณต้องการล้างประวัติการวัดทั้งหมดใช่หรือไม่?")) {
+                const historyRef = ref(database, 'TapeMeasure/history');
+                remove(historyRef).then(() => {
+                    alert("ล้างข้อมูลเรียบร้อยแล้ว");
+                }).catch((err) => {
+                    alert("เกิดข้อผิดพลาดในการล้างข้อมูล: " + err.message);
+                });
+            }
+        });
+
+        // Initialize App
+        window.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            listenFirebase();
+        });
+    </script>
+</body>
+</html>
